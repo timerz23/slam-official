@@ -15,7 +15,7 @@ jobs:
           usedocker: true
           docker_heroku_process_type: web
           stack: "container"
-          region: "us"
+          region: "eu"
         env:
           HD_AUTO_DELETE_MESSAGE_DURATION: ${{secrets.AUTO_DELETE_MESSAGE_DURATION}}
           HD_BASE_URL_OF_BOT: ${{secrets.BASE_URL_OF_BOT}}
