@@ -1,5 +1,7 @@
 FROM breakdowns/mega-sdk-python:latest
 
+RUN apt-get install megatools -y
+
 WORKDIR /usr/src/app
 RUN chmod 777 /usr/src/app
 
