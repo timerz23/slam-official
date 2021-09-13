@@ -4,20 +4,20 @@ import os
 import asyncio
 
 from pyrogram import idle
-from bot import app
 from sys import executable
 
 from telegram import ParseMode
 from telegram.ext import CommandHandler
+from telegram.error import BadRequest, Unauthorized
 from wserver import start_server_async
-from bot import bot, dispatcher, updater, botStartTime, IGNORE_PENDING_REQUESTS, IS_VPS, SERVER_PORT
+from bot import bot, app, dispatcher, updater, botStartTime, IGNORE_PENDING_REQUESTS, IS_VPS, PORT, alive, web, OWNER_ID, AUTHORIZED_CHATS
 from bot.helper.ext_utils import fs_utils
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.message_utils import *
 from .helper.ext_utils.bot_utils import get_readable_file_size, get_readable_time
 from .helper.telegram_helper.filters import CustomFilters
 from bot.helper.telegram_helper import button_build
-from .modules import authorize, list, cancel_mirror, mirror_status, mirror, clone, watch, shell, eval, torrent_search, delete, speedtest, count, config, updates
+from .modules import authorize, list, cancel_mirror, mirror_status, mirror, clone, watch, shell, eval, torrent_search, delete, speedtest, count
 
 
 def stats(update, context):
@@ -44,21 +44,23 @@ def stats(update, context):
 
 
 def start(update, context):
-    start_string = f'''
-This bot can mirror all your links to Google Drive!
-Type /{BotCommands.HelpCommand} to get a list of available commands
-'''
     buttons = button_build.ButtonMaker()
     buttons.buildbutton("Repo", "https://github.com/SlamDevs/slam-mirrorbot")
     buttons.buildbutton("Channel", "https://t.me/SlamMirrorUpdates")
     reply_markup = InlineKeyboardMarkup(buttons.build_menu(2))
     if CustomFilters.authorized_user(update) or CustomFilters.authorized_chat(update):
-        if update.message.chat.type == "private" :
-            sendMarkup(start_string, context.bot, update, reply_markup)
-        else :
-            sendMarkup(start_string, context.bot, update, reply_markup)
-    else :
-        sendMarkup(f"Oops! not a Authorized user.\nPlease deploy your own <b>slam-mirrorbot</b>.", context.bot, update, reply_markup)
+        start_string = f'''
+This bot can mirror all your links to Google Drive!
+Type /{BotCommands.HelpCommand} to get a list of available commands
+'''
+        sendMarkup(start_string, context.bot, update, reply_markup)
+    else:
+        sendMarkup(
+            'Oops! not a Authorized user.\nPlease deploy your own <b>slam-mirrorbot</b>.',
+            context.bot,
+            update,
+            reply_markup,
+        )
 
 
 def restart(update, context):
@@ -68,6 +70,8 @@ def restart(update, context):
         f.truncate(0)
         f.write(f"{restart_message.chat.id}\n{restart_message.message_id}\n")
     fs_utils.clean_all()
+    alive.terminate()
+    web.terminate()
     os.execl(executable, executable, "-m", "bot")
 
 
@@ -130,13 +134,9 @@ def bot_help(update, context):
 
 /{BotCommands.LogCommand}: Get a log file of the bot. Handy for getting crash reports
 
-/{BotCommands.ConfigMenuCommand}: Get Info Menu about bot config (Owner Only)
-
-/{BotCommands.UpdateCommand}: Update Bot from Upstream Repo (Owner Only)
-
 /{BotCommands.SpeedCommand}: Check Internet Speed of the Host
 
-/{BotCommands.ShellCommand}: Run commands in Shell (Terminal)
+/{BotCommands.ShellCommand}: Run commands in Shell (Only Owner)
 
 /{BotCommands.ExecHelpCommand}: Get help for Executor module (Only Owner)
 
@@ -208,7 +208,7 @@ def main():
     fs_utils.start_cleanup()
 
     if IS_VPS:
-        asyncio.get_event_loop().run_until_complete(start_server_async(SERVER_PORT))
+        asyncio.get_event_loop().run_until_complete(start_server_async(PORT))
 
     # Check if the bot is restarting
     if os.path.isfile(".restartmsg"):
@@ -216,6 +216,19 @@ def main():
             chat_id, msg_id = map(int, f)
         bot.edit_message_text("Restarted successfully!", chat_id, msg_id)
         os.remove(".restartmsg")
+    
+    elif OWNER_ID:
+        try:
+            text = "<b>Bot Restarted!</b>"
+            bot.sendMessage(chat_id=OWNER_ID, text=text, parse_mode=ParseMode.HTML)
+            if AUTHORIZED_CHATS:
+                for i in AUTHORIZED_CHATS:
+                    bot.sendMessage(chat_id=i, text=text, parse_mode=ParseMode.HTML)
+        except Unauthorized:
+            LOGGER.warning("Bot isn't able to send message to OWNER_ID or AUTHORIZED_CHATS, go and check!")
+        except BadRequest as e:
+            LOGGER.warning(e.message)
+
     bot.set_my_commands(botcmds)
 
     start_handler = CommandHandler(BotCommands.StartCommand, start, run_async=True)
